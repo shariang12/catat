@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ETrimoney - Pencatat Hutang</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f4f4f4;
+      padding: 1rem;
+      max-width: 480px;
+      margin: auto;
+    }
+    h1 {
+      text-align: center;
+      color: #00695c;
+    }
+    .form-group {
+      margin-bottom: 1rem;
+    }
+    input, button {
+      width: 100%;
+      padding: 0.75rem;
+      margin-top: 0.25rem;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-size: 1rem;
+    }
+    button {
+      background-color: #00796b;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #004d40;
+    }
+    .list {
+      margin-top: 2rem;
+    }
+    .item {
+      background: white;
+      border-left: 5px solid #00796b;
+      margin-bottom: 1rem;
+      padding: 1rem;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .item.lunas {
+      opacity: 0.6;
+      text-decoration: line-through;
+      border-left-color: #999;
+    }
+    .item.due-soon {
+      border-left-color: #d32f2f;
+      background: #ffe6e6;
+    }
+    .item small {
+      color: #666;
+    }
+    .item button {
+      margin-top: 0.5rem;
+      background-color: #388e3c;
+      padding: 0.4rem 0.6rem;
+      font-size: 0.9rem;
+    }
+    #transaksiModal {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 99;
+    }
+    .transaksi-content {
+      background: white;
+      width: 90%;
+      max-height: 90%;
+      overflow-y: auto;
+      padding: 1rem;
+      border-radius: 10px;
+    }
+    .transaksi-item {
+      border-bottom: 1px solid #ddd;
+      padding: 0.5rem 0;
+    }
+    .transaksi-item span {
+      display: block;
+      font-size: 0.9rem;
+    }
+    .close-btn {
+      margin-top: 1rem;
+      background: #d32f2f;
+    }
+    .btn-secondary {
+      margin-top: 1rem;
+      background: #455a64;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>ETrimoney</h1>
+
+  <form id="debtForm">
+    <div class="form-group">
+      <label>Nama</label>
+      <input type="text" id="name" required />
+    </div>
+    <div class="form-group">
+      <label>Nominal (Rp)</label>
+      <input type="number" id="amount" required />
+    </div>
+    <div class="form-group">
+      <label>Jatuh Tempo</label>
+      <input type="date" id="dueDate" required />
+    </div>
+    <button type="submit">Simpan Hutang</button>
+    <button type="button" class="btn-secondary" onclick="bukaTransaksi()">Lihat Semua Transaksi</button>
+  </form>
+
+  <div class="list" id="debtList">
+    <!-- Daftar hutang tampil di sini -->
+  </div>
+
+  <!-- Modal Transaksi -->
+  <div id="transaksiModal">
+    <div class="transaksi-content">
+      <h3>Semua Transaksi</h3>
+      <div id="transaksiList"></div>
+      <button class="close-btn" onclick="tutupTransaksi()">Tutup</button>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('debtForm');
+    const list = document.getElementById('debtList');
+    const transaksiModal = document.getElementById('transaksiModal');
+    const transaksiList = document.getElementById('transaksiList');
+
+    function loadDebts() {
+      const debts = JSON.parse(localStorage.getItem('debts')) || [];
+      debts.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+      list.innerHTML = '';
+
+      const now = new Date();
+      debts.forEach((debt, index) => {
+        const item = document.createElement('div');
+        item.className = 'item';
+        if (debt.status === 'lunas') item.classList.add('lunas');
+
+        const dueDate = new Date(debt.dueDate);
+        const timeDiff = dueDate - now;
+        const daysLeft = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+
+        if (daysLeft <= 1 && debt.status !== 'lunas') {
+          item.classList.add('due-soon');
+        }
+
+        item.innerHTML = `
+          <h3>${debt.name} - Rp${parseInt(debt.amount).toLocaleString()}</h3>
+          <small>Jatuh tempo: ${dueDate.toLocaleDateString('id-ID')}</small>
+          ${debt.status !== 'lunas' ? `<button onclick="markAsPaid(${index})">Tandai Lunas</button>` : ''}
+        `;
+        list.appendChild(item);
+      });
+    }
+
+    function markAsPaid(index) {
+      const debts = JSON.parse(localStorage.getItem('debts')) || [];
+      debts[index].status = 'lunas';
+      localStorage.setItem('debts', JSON.stringify(debts));
+      loadDebts();
+    }
+
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      const name = document.getElementById('name').value.trim();
+      const amount = document.getElementById('amount').value.trim();
+      const dueDate = document.getElementById('dueDate').value;
+      const dateNow = new Date().toISOString();
+
+      if (name && amount && dueDate) {
+        const debt = { name, amount, dueDate, created: dateNow, status: 'belum' };
+        const debts = JSON.parse(localStorage.getItem('debts')) || [];
+        debts.push(debt);
+        localStorage.setItem('debts', JSON.stringify(debts));
+        form.reset();
+        loadDebts();
+      }
+    });
+
+    function bukaTransaksi() {
+      const debts = JSON.parse(localStorage.getItem('debts')) || [];
+      transaksiList.innerHTML = '';
+
+      debts.sort((a, b) => new Date(b.created) - new Date(a.created));
+
+      debts.forEach(debt => {
+        const item = document.createElement('div');
+        item.className = 'transaksi-item';
+        item.innerHTML = `
+          <strong>${debt.name}</strong>
+          <span>Rp${parseInt(debt.amount).toLocaleString()}</span>
+          <span>Jatuh Tempo: ${new Date(debt.dueDate).toLocaleDateString('id-ID')}</span>
+          <span>Status: <b style="color:${debt.status === 'lunas' ? 'green' : 'red'}">${debt.status.toUpperCase()}</b></span>
+          <span>Dicatat: ${new Date(debt.created).toLocaleString('id-ID')}</span>
+        `;
+        transaksiList.appendChild(item);
+      });
+
+      transaksiModal.style.display = 'flex';
+    }
+
+    function tutupTransaksi() {
+      transaksiModal.style.display = 'none';
+    }
+
+    loadDebts();
+  </script>
+</body>
+</html>
